@@ -1,11 +1,9 @@
+require('dotenv').config();
 const mongoose = require('mongoose');
 
-// URI Local (Origen)
-const LOCAL_URI = 'mongodb://localhost:27017/torneos-marangoni';
-
-// URI Atlas (Destino)
-// Agregamos el nombre de la base de datos 'torneos-marangoni' a la URL
-const ATLAS_URI = 'mongodb+srv://admin:1234@marangoni-torneos.nqulwwd.mongodb.net/marangoni-torneos?retryWrites=true&w=majority&appName=marangoni-torneos';
+// Usar variables de entorno para seguridad
+const LOCAL_URI = process.env.MONGO_URI_LOCAL || 'mongodb://localhost:27017/torneos-marangoni';
+const ATLAS_URI = process.env.MONGO_URI;
 
 async function migrate() {
   console.log('🚀 Iniciando migración de datos...');
