@@ -11,7 +11,8 @@ const {
   removeInscription,
   addPartner,
   updateZones,
-  updateTournament
+  updateTournament,
+  regenerateGroupMatches
 } = require('../controllers/tournamentController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -28,6 +29,7 @@ router.post('/:id/advance', protect, authorize('administrador', 'organizador', '
 router.post('/:id/remove-inscription', protect, authorize('administrador', 'organizador', 'profesor'), removeInscription);
 router.post('/:id/add-partner', protect, authorize('administrador', 'organizador', 'profesor'), addPartner);
 router.put('/:id/zones', protect, authorize('administrador', 'organizador', 'profesor'), updateZones);
+router.post('/:id/regenerate-groups', protect, authorize('administrador', 'organizador', 'profesor'), regenerateGroupMatches);
 router.delete('/:id', protect, authorize('administrador', 'organizador'), deleteTournament);
 
 module.exports = router;

@@ -396,6 +396,55 @@ exports.updateZones = async (req, res, next) => {
   }
 };
 
+exports.regenerateGroupMatches = async (req, res, next) => {
+  try {
+    const tournament = await Tournament.findById(req.params.id);
+    if (!tournament) return res.status(404).json({ success: false, message: 'Torneo no encontrado' });
+
+    if (tournament.estado !== 'en_curso') {
+      return res.status(400).json({ success: false, message: 'El torneo debe estar en curso para regenerar partidos' });
+    }
+
+    if (!tournament.zonas || tournament.zonas.length === 0) {
+      return res.status(400).json({ success: false, message: 'El torneo no tiene zonas configuradas' });
+    }
+
+    const Match = require('../models/Match');
+    const isDoubles = tournament.disciplina === 'padel';
+
+    // Delete only group-stage matches (those with a 'grupo' field)
+    await Match.deleteMany({ torneoId: tournament._id, grupo: { $exists: true, $ne: null, $ne: '' } });
+
+    let created = 0;
+    for (const zona of tournament.zonas) {
+      const participants = zona.jugadores;
+      const n = participants.length;
+      if (n < 2) continue;
+
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          await Match.create({
+            torneoId: tournament._id,
+            ronda: 1,
+            numeroPartido: tournament.zonas.indexOf(zona) * 100 + (i * 10 + j),
+            grupo: zona.nombre,
+            estado: 'pendiente',
+            jugador1: isDoubles ? undefined : participants[i],
+            jugador2: isDoubles ? undefined : participants[j],
+            pareja1: isDoubles ? [participants[i]] : undefined,
+            pareja2: isDoubles ? [participants[j]] : undefined
+          });
+          created++;
+        }
+      }
+    }
+
+    res.status(200).json({ success: true, message: `Se generaron ${created} partidos de grupo`, data: tournament });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.updateTournament = async (req, res, next) => {
   try {
     const tournament = await Tournament.findById(req.params.id);
