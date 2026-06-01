@@ -108,3 +108,36 @@ exports.awardTournamentPoints = async (tournament) => {
   tournament.rankingGenerado = true;
   await tournament.save();
 };
+
+exports.awardQualifyingPoints = async (tournament, playerIds, totalRounds) => {
+  const disciplina = tournament.disciplina;
+  let ranking = await Ranking.findOne({ disciplina, tipo: 'global' });
+  if (!ranking) ranking = await Ranking.create({ disciplina, tipo: 'global' });
+
+  let pointsToAward = 0;
+  if (totalRounds === 3) {
+    // Starts at Quarterfinals -> reaching Quarterfinals gives llegarCuartos points (50)
+    pointsToAward = tournament.puntosConfig?.llegarCuartos || 50;
+  } else if (totalRounds === 2) {
+    // Starts at Semifinals -> reaching Semifinals gives llegarSemis points (75)
+    pointsToAward = tournament.puntosConfig?.llegarSemis || 75;
+  } else if (totalRounds === 1) {
+    // Starts at Finals -> reaching Finals gives llegarFinal points (100)
+    pointsToAward = tournament.puntosConfig?.llegarFinal || 100;
+  }
+
+  if (pointsToAward === 0) return;
+
+  for (const pId of playerIds) {
+    if (!pId) continue;
+    let entry = ranking.entradas.find(e => e.jugadorId.toString() === pId.toString());
+    if (!entry) {
+      entry = { jugadorId: pId };
+      ranking.entradas.push(entry);
+    }
+    entry.puntos += pointsToAward;
+  }
+
+  await ranking.save();
+};
+

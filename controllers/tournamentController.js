@@ -1,6 +1,7 @@
 const Tournament = require('../models/Tournament');
 const User = require('../models/User');
 const bracketService = require('../services/bracketService');
+const statsService = require('../services/statsService');
 
 exports.createTournament = async (req, res, next) => {
   try {
@@ -102,12 +103,10 @@ exports.startTournament = async (req, res, next) => {
     const isDoubles = tournament.disciplina === 'padel';
 
     let bracketInfo;
-    if (tournament.formato === 'round_robin') {
-      bracketInfo = await bracketService.generateRoundRobin(tournament._id, shuffledPlayers, isDoubles);
-    } else if (tournament.formato === 'grupos_+_eliminacion') {
+    if (tournament.formato === 'grupos_+_eliminacion') {
       bracketInfo = await bracketService.generateGroups(tournament._id, shuffledPlayers, 4, isDoubles);
-    } else if (tournament.formato === 'eliminacion_directa_perdedores') {
-      // Para este formato, las zonas se crearon manualmente.
+    } else if (tournament.formato === 'eliminacion_directa_perdedores' || tournament.formato === 'grupos_1y2_eliminacion') {
+      // Para estos formatos, las zonas se crearon manualmente.
       // Generamos los partidos de Round Robin para cada zona.
       for (const zona of tournament.zonas) {
         const participants = zona.jugadores;
@@ -122,17 +121,15 @@ exports.startTournament = async (req, res, next) => {
               estado: 'pendiente',
               jugador1: isDoubles ? undefined : participants[i],
               jugador2: isDoubles ? undefined : participants[j],
-              pareja1: isDoubles ? [participants[i]] : undefined, // Simplificado para Tenis (singles)
+              pareja1: isDoubles ? [participants[i]] : undefined,
               pareja2: isDoubles ? [participants[j]] : undefined
             });
           }
         }
       }
       bracketInfo = { type: 'groups', numGroups: tournament.zonas.length };
-    } else if (tournament.formato === 'manual') {
-      bracketInfo = { type: 'manual', rounds: 1 };
     } else {
-      bracketInfo = await bracketService.generateSingleElimination(tournament._id, shuffledPlayers, isDoubles);
+      return res.status(400).json({ success: false, message: 'Formato de torneo no soportado' });
     }
     
     tournament.bracket = bracketInfo;
@@ -282,11 +279,13 @@ exports.advanceTournament = async (req, res, next) => {
     let mainBracketParticipants = [];
     let losersBracketParticipants = [];
 
-    if (tournament.formato === 'eliminacion_directa_perdedores') {
+    if (['eliminacion_directa_perdedores', 'grupos_1y2_eliminacion'].includes(tournament.formato)) {
       // Clasificación: Los 2 primeros de cada zona van al Cuadro Principal.
-      // El resto (3ro, 4to, etc.) van al Cuadro de Perdedores.
       mainBracketParticipants = participantStats.filter(ps => ps.rank <= 2);
-      losersBracketParticipants = participantStats.filter(ps => ps.rank > 2);
+      if (tournament.formato === 'eliminacion_directa_perdedores') {
+        // El resto (3ro, 4to, etc.) van al Cuadro de Perdedores.
+        losersBracketParticipants = participantStats.filter(ps => ps.rank > 2);
+      }
     } else {
       // Comportamiento anterior para otros formatos que usen grupos
       mainBracketParticipants = participantStats;
@@ -305,6 +304,20 @@ exports.advanceTournament = async (req, res, next) => {
         getP(0, 1), getP(1, 1), getP(2, 1), getP(3, 1), 
         getP(1, 2), getP(0, 2), getP(3, 2), getP(2, 2)
       ].filter(p => p);
+    } else if (tournament.formato === 'grupos_1y2_eliminacion') {
+      const zoneNames = tournament.zonas.map(z => z.nombre);
+      const getP = (zoneIdx, rank) => mainParticipants.find(p => p.group === zoneNames[zoneIdx] && p.rank === rank);
+      
+      const numZones = tournament.zonas.length;
+      const firsts = [];
+      const seconds = [];
+      for (let i = 0; i < numZones; i++) {
+        const p1 = getP(i, 1);
+        if (p1) firsts.push(p1);
+        const p2 = getP(i, 2);
+        if (p2) seconds.push(p2);
+      }
+      mainList = [...firsts, ...seconds];
     } else {
       mainList = mainParticipants;
     }
@@ -335,6 +348,25 @@ exports.advanceTournament = async (req, res, next) => {
     const finalLosersList = losersList.map(mapToBracket);
 
     tournament.bracket = await bracketService.generateSingleElimination(tournament._id, finalMainList, isDoubles, 'principal');
+    
+    // Award qualifying points based on bracket starting round
+    if (tournament.bracket?.rounds) {
+      const playerIds = [];
+      mainList.forEach(ps => {
+        if (isDoubles) {
+          const players = Array.isArray(ps.originalData) ? ps.originalData : [ps.originalData];
+          players.forEach(pl => {
+            if (pl) {
+              const pId = pl._id || pl;
+              if (pId) playerIds.push(pId);
+            }
+          });
+        } else {
+          if (ps.id) playerIds.push(ps.id);
+        }
+      });
+      await statsService.awardQualifyingPoints(tournament, playerIds, tournament.bracket.rounds);
+    }
     
     if (tournament.formato === 'eliminacion_directa_perdedores' && finalLosersList.length >= 2) {
       tournament.bracketSecundario = await bracketService.generateSingleElimination(tournament._id, finalLosersList, isDoubles, 'perdedores');
