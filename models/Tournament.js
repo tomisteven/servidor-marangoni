@@ -5,7 +5,7 @@ const tournamentSchema = new mongoose.Schema({
   disciplina: { type: String, enum: ['padel', 'tenis'], required: true },
   formato: {
     type: String,
-    enum: ['grupos_+_eliminacion', 'eliminacion_directa_perdedores', 'grupos_1y2_eliminacion'],
+    enum: ['grupos_+_eliminacion', 'eliminacion_directa_perdedores', 'grupos_1y2_eliminacion', 'eliminacion_directa'],
     required: true
   },
   estado: {

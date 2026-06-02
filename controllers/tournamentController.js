@@ -128,6 +128,10 @@ exports.startTournament = async (req, res, next) => {
         }
       }
       bracketInfo = { type: 'groups', numGroups: tournament.zonas.length };
+    } else if (tournament.formato === 'eliminacion_directa') {
+      // Eliminación Directa: generar bracket vacío para que el organizador arme los cruces
+      const numPlayers = tournament.inscripciones.length;
+      bracketInfo = await bracketService.generateEmptyBracket(tournament._id, numPlayers);
     } else {
       return res.status(400).json({ success: false, message: 'Formato de torneo no soportado' });
     }

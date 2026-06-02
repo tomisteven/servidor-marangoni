@@ -81,6 +81,32 @@ exports.generateSingleElimination = async (tournamentId, players, isDoubles = fa
 };
 
 /**
+ * Generates an empty single elimination bracket (organizer assigns first round manually)
+ */
+exports.generateEmptyBracket = async (tournamentId, numParticipants) => {
+  const rounds = Math.ceil(Math.log2(numParticipants));
+  const bracketSize = Math.pow(2, rounds);
+  const numMatchesR1 = bracketSize / 2;
+
+  const allMatches = [];
+  for (let r = 1; r <= rounds; r++) {
+    const matchesInRound = Math.pow(2, rounds - r);
+    for (let m = 1; m <= matchesInRound; m++) {
+      const match = await Match.create({
+        torneoId: tournamentId,
+        ronda: r,
+        numeroPartido: m,
+        tipoCuadro: 'principal',
+        estado: 'pendiente'
+      });
+      allMatches.push(match);
+    }
+  }
+
+  return { rounds, firstRoundMatches: numMatchesR1 };
+};
+
+/**
  * Generates a Round Robin schedule (Groups of 3/4)
  */
 exports.generateRoundRobin = async (tournamentId, players, isDoubles = false) => {
