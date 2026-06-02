@@ -25,6 +25,7 @@ const sendTokenResponse = (user, statusCode, res) => {
       success: true,
       token,
       user: {
+        _id: user._id,
         id: user._id,
         nombre: user.nombre,
         apellido: user.apellido,
@@ -178,24 +179,32 @@ exports.updateProfile = async (req, res, next) => {
 exports.adminUpdateUser = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const allowedFields = [
-      'nombre', 'apellido', 'email', 'rol', 'categoria', 
-      'dni', 'telefono', 'nacionalidad', 'sexo', 'domicilio', 'activo'
-    ];
-
-    const fieldsToUpdate = {};
-    allowedFields.forEach(field => {
-      if (req.body[field] !== undefined) fieldsToUpdate[field] = req.body[field];
-    });
-
-    const user = await User.findByIdAndUpdate(id, fieldsToUpdate, {
-      new: true,
-      runValidators: true
-    });
-
+    const user = await User.findById(id);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
 
-    res.status(200).json({ success: true, data: user });
+    const allowedFields = [
+      'nombre', 'apellido', 'email', 'rol', 'categoria', 
+      'dni', 'telefono', 'nacionalidad', 'sexo', 'domicilio', 'activo', 'password'
+    ];
+
+    allowedFields.forEach(field => {
+      if (req.body[field] !== undefined) {
+        if (field === 'password') {
+          if (req.body.password && req.body.password.trim() !== '') {
+            user.passwordHash = req.body.password;
+          }
+        } else {
+          user[field] = req.body[field];
+        }
+      }
+    });
+
+    await user.save();
+
+    const userObj = user.toObject();
+    delete userObj.passwordHash;
+
+    res.status(200).json({ success: true, data: userObj });
   } catch (error) {
     next(error);
   }

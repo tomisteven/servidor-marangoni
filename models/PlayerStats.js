@@ -28,6 +28,7 @@ const playerStatsSchema = new mongoose.Schema({
   },
   historialVsJugadores: [{
     rivalId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    disciplina: { type: String, enum: ['padel', 'tenis'] },
     ganados: { type: Number, default: 0 },
     perdidos: { type: Number, default: 0 },
     ultimoPartido: { type: Date }

@@ -48,6 +48,33 @@ exports.updatePlayerStats = async (match, tournament) => {
     dStats.setsGanados += playerSets;
     dStats.setsPerdidos += rivalSets;
 
+    // Update head-to-head (historialVsJugadores)
+    const rivals = isInTeam1 ? players2 : players1;
+    for (const rival of rivals) {
+      const rivalId = rival?._id || rival;
+      if (!rivalId || rivalId.toString() === pId.toString()) continue;
+
+      let h2h = stats.historialVsJugadores.find(h => h.rivalId.toString() === rivalId.toString() && h.disciplina === disciplina);
+      if (!h2h) {
+        h2h = {
+          rivalId: rivalId,
+          disciplina: disciplina,
+          ganados: 0,
+          perdidos: 0,
+          ultimoPartido: new Date()
+        };
+        stats.historialVsJugadores.push(h2h);
+        h2h = stats.historialVsJugadores[stats.historialVsJugadores.length - 1];
+      }
+
+      if (playerWonMatch) {
+        h2h.ganados += 1;
+      } else {
+        h2h.perdidos += 1;
+      }
+      h2h.ultimoPartido = new Date();
+    }
+
     stats.ultimaActualizacion = Date.now();
     await stats.save();
 

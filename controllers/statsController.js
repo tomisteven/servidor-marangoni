@@ -131,3 +131,71 @@ exports.getPlayerStats = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/stats/rebuild  (admin only)
+ * Wipes all PlayerStats + Ranking and rebuilds them from existing Match documents.
+ */
+exports.rebuildAllStats = async (req, res, next) => {
+  try {
+    const Match = require('../models/Match');
+    const Ranking = require('../models/Ranking');
+    const Tournament = require('../models/Tournament');
+    const statsService = require('../services/statsService');
+
+    // 1. Wipe derived collections
+    await PlayerStats.deleteMany({});
+    await Ranking.deleteMany({});
+
+    // 2. Re-process every finalizado match
+    const matches = await Match.find({ estado: 'finalizado' })
+      .populate('torneoId')
+      .populate('jugador1', '_id nombre')
+      .populate('jugador2', '_id nombre')
+      .populate('pareja1', '_id nombre')
+      .populate('pareja2', '_id nombre');
+
+    let processed = 0;
+    let skipped = 0;
+    for (const m of matches) {
+      if (!m.torneoId || !m.resultado?.ganador) { skipped++; continue; }
+      try {
+        await statsService.updatePlayerStats(m, m.torneoId);
+        processed++;
+      } catch (e) {
+        skipped++;
+      }
+    }
+
+    // 3. Award tournament wins & torneoJugados
+    const finishedTournaments = await Tournament.find({ estado: 'finalizado', ganador: { $exists: true, $ne: null } });
+    for (const t of finishedTournaments) {
+      const disc = t.disciplina;
+      const winnerId = t.ganador?.toString();
+
+      for (const insc of (t.inscripciones || [])) {
+        const ids = [insc.jugador1, insc.jugador2].filter(Boolean);
+        for (const pId of ids) {
+          let stats = await PlayerStats.findOne({ jugadorId: pId });
+          if (!stats) stats = await PlayerStats.create({ jugadorId: pId });
+          stats.porDisciplina[disc].torneoJugados += 1;
+          if (
+            winnerId && (
+              insc.jugador1?.toString() === winnerId ||
+              insc.jugador2?.toString() === winnerId
+            )
+          ) {
+            stats.porDisciplina[disc].torneoGanados += 1;
+          }
+          await stats.save();
+        }
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Reconstrucción completada. Partidos procesados: ${processed}, Omitidos: ${skipped}.`
+    });
+  } catch (error) {
+    next(error);
+  }
+};
